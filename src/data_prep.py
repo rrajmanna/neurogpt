@@ -120,3 +120,53 @@ def process_subject_session_fixed(edf_path, channels_tsv_path, fixed_channels):
     mask = get_movement_mask(raw)
     windows, labels = windowize(raw, mask)
     return windows, labels
+
+
+
+from scipy.signal import welch
+
+BANDS = {"theta": (4, 8), "alpha": (8, 13), "beta": (13, 30), "gamma": (70, 100)}
+MOVEMENT_PRE_SEC = 0.1
+MOVEMENT_POST_SEC = 0.35
+
+def compute_band_power_features(window, sfreq):
+    freqs, psd = welch(window, fs=sfreq, axis=-1, nperseg=window.shape[-1])
+    features = []
+    for low, high in BANDS.values():
+        mask = (freqs >= low) & (freqs <= high)
+        features.append(psd[:, mask].mean(axis=-1))
+    return np.stack(features, axis=-1)
+
+def get_movement_mask_v2(raw):
+    n_samples = len(raw.times)
+    mask = np.zeros(n_samples, dtype=bool)
+    sfreq = raw.info["sfreq"]
+    for ann in raw.annotations:
+        if "101" in str(ann["description"]):
+            center = int(ann["onset"] * sfreq)
+            pre = int(MOVEMENT_PRE_SEC * sfreq)
+            post = int(MOVEMENT_POST_SEC * sfreq)
+            start = max(0, center - pre)
+            end = min(n_samples, center + post)
+            mask[start:end] = True
+    return mask
+
+def windowize_with_features(raw, movement_mask):
+    data = raw.get_data()
+    data = (data - data.mean(axis=1, keepdims=True)) / (data.std(axis=1, keepdims=True) + 1e-6)
+
+    n_channels, n_samples = data.shape
+    n_windows = n_samples // WINDOW_SAMPLES
+    sfreq = raw.info["sfreq"]
+
+    windows = np.zeros((n_windows, n_channels, WINDOW_SAMPLES), dtype=np.float32)
+    band_features = np.zeros((n_windows, n_channels, len(BANDS)), dtype=np.float32)
+    labels = np.zeros(n_windows, dtype=np.int64)
+
+    for i in range(n_windows):
+        s, e = i * WINDOW_SAMPLES, (i + 1) * WINDOW_SAMPLES
+        windows[i] = data[:, s:e]
+        band_features[i] = compute_band_power_features(data[:, s:e], sfreq)
+        labels[i] = int(movement_mask[s:e].mean() > 0.5)
+
+    return windows, band_features, labels
