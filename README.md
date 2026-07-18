@@ -12,7 +12,7 @@ This project uses one subject, one session: 64 electrodes, 7 minutes of recordin
 
 1. **Load and clean**: read the  EDF file, keep only electrodes marked "good" (excluding ones flagged as noisy), apply standard filtering
 2. **Segment into windows**: split the recording into 200ms chunks, each labeled "movement" or "rest" based on proximity to a finger-tap event.
-3. **Extract features**: in addition to raw voltage, compute band power (theta, alpha, beta, gamma) for each channel and window
+3. **Extract features**: compute band power (theta, alpha, beta, gamma) for each channel and window
 4. **Train the model**: a transformer that takes a sequence of windows and learns to predict the next one, trained with loss rather than direct regression.
 5. **Analyze**: extract the model's learned embeddings for movement vs. rest windows and check whether they separate.
 
